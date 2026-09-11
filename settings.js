@@ -1,6 +1,6 @@
 /* =================[ OWNER ]================= */
 global.lidownernumber = null //biarkan kosong, nanti di isi di dalam RAM
-global.ownernumber = "6282191240883"
+global.ownernumber = "6281542060352"
 global.ownername = "axly"
 
 
