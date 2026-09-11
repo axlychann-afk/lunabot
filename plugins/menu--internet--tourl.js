@@ -87,26 +87,40 @@ async function tourl(buffer) {
         ext
     } = await fileTypeFromBuffer(buffer);
 
-    const formData = new FormData();
-    formData.append("file", buffer, `file.${ext}`);
+    // utama: aceimg (no key) — cadangan: catbox (no key)
+    try {
+        const formData = new FormData();
+        formData.append("file", buffer, `file.${ext}`);
 
-    const res = await fetch(
-        `https://api.aceimg.com/api/upload?visitorId=${encodeURIComponent(visitorId)}`, {
+        const res = await fetch(
+            `https://api.aceimg.com/api/upload?visitorId=${encodeURIComponent(visitorId)}`, {
+                method: "POST",
+                body: formData,
+            }
+        );
+
+        const data = await res.json();
+
+        if (!data || !data.link) {
+            throw new Error("Upload gagal, response invalid");
+        }
+        let link = data.link;
+        const match = link.match(/https:\/\/aceimg\.com\/upload\/\?f=(.+)/);
+        if (match) {
+            link = `https://cdn.aceimg.com/${match[1]}`;
+        }
+
+        return link;
+    } catch (_) {
+        const formData = new FormData();
+        formData.append("reqtype", "fileupload");
+        formData.append("fileToUpload", buffer, `file.${ext}`);
+        const res = await fetch("https://catbox.moe/user/api.php", {
             method: "POST",
             body: formData,
-        }
-    );
-
-    const data = await res.json();
-
-    if (!data || !data.link) {
-        throw new Error("Upload gagal, response invalid");
+        });
+        const link = (await res.text()).trim();
+        if (!/^https?:\/\//.test(link)) throw new Error("Upload gagal di semua server.");
+        return link;
     }
-    let link = data.link;
-    const match = link.match(/https:\/\/aceimg\.com\/upload\/\?f=(.+)/);
-    if (match) {
-        link = `https://cdn.aceimg.com/${match[1]}`;
-    }
-
-    return link;
 }

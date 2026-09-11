@@ -1,5 +1,5 @@
 import "../settings.js";
-import axios from 'axios'
+import { pinImages } from "../lib/scrape.js";
 
 export default {
     command: ['pinterest', 'pin'],
@@ -18,48 +18,26 @@ export default {
         RyuuBotz,
         reply
     }) => {
-        await RyuuBotz.sendMessage(m.chat, {
-            react: {
-                text: "⏱️",
-                key: m.key
-            }
-        })
+        await RyuuBotz.sendMessage(m.chat, { react: { text: "⏱️", key: m.key } });
 
         try {
-            if (!text) return reply("Format salah ya sayang… contoh:\n.pin Anime 💕")
+            if (!text) return reply("Format salah ya sayang… contoh:\n.pin Anime 💕");
 
-            const {
-                data
-            } = await axios.get(
-                `https://api.ryuu-dev.my.id/discovery/search/pinterest?query=${encodeURIComponent(text)}`, {
-                    headers: {
-                        "x-ryuu-apikey": global.ryuukey
-                    }
-                }
-            )
+            const images = await pinImages(text.trim(), 5);
+            if (!images.length) return reply("Gambarnya nggak ketemu… aku sedih 😢");
 
-            const results = data.result.result
-            if (!results || results.length === 0)
-                return reply("Gambarnya nggak ketemu… aku sedih 😢")
+            const album = images.map((img, i) => ({
+                image: { url: img },
+                caption: `🖼️ Gambar ke-${i + 1}\n🔗 ${img}`
+            }));
 
-            const images = results.slice(0, 10)
-
-            const album = images.map((v, i) => ({
-                image: {
-                    url: v.image
-                },
-                caption: `🖼️ Gambar ke-${i + 1}\n` +
-                    `${v.caption || 'Tanpa caption'}\n\n` +
-                    `🔗 ${v.source || v.image}`
-            }))
-
-            await RyuuBotz.sendAlbum(m.chat, album, {
-                quoted: m
-            })
+            await RyuuBotz.sendAlbum(m.chat, album, { quoted: m });
+            await RyuuBotz.sendMessage(m.chat, { react: { text: "✅", key: m.key } });
 
         } catch (err) {
-            console.error(err)
-            m.reply(JSON.stringify(err))
+            console.error('Pinterest Error:', err.message);
+            await RyuuBotz.sendMessage(m.chat, { react: { text: "❌", key: m.key } });
+            reply(`❌ Gagal cari gambar.\n\n${err.message}`);
         }
     }
-}
+};

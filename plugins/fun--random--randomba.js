@@ -1,4 +1,4 @@
-import axios from "axios";
+import { randomBA } from "../lib/scrape.js";
 
 export default {
   command: ["randomba"],
@@ -13,23 +13,18 @@ export default {
   disable: false,
 
   code: async (m, { RyuuBotz, reply }) => {
-
   try {
     await RyuuBotz.sendMessage(m.chat, { react: { text: "⏱️", key: m.key } });
-
-    const url = "https://api.ryuu-dev.my.id/random/blue-archive";
-    const response = await axios.get(url, { responseType: "arraybuffer" });
-    const buffer = Buffer.from(response.data, "binary");
-
+    const pic = await randomBA();
     await RyuuBotz.sendMessage(
       m.chat,
-      { image: buffer, caption: "Blue Archive image for you ._." },
+      { image: { url: pic.url }, caption: `Blue Archive — ${pic.name} ._.` },
       { quoted: m }
     );
+    await RyuuBotz.sendMessage(m.chat, { react: { text: "✅", key: m.key } });
   } catch (err) {
-    console.error(err);
-    reply(`❌ Terjadi kesalahan:\n${err}`);
+    console.error(err.message);
+    reply(`❌ Terjadi kesalahan:\n${err.message}`);
   }
-
   }
 };

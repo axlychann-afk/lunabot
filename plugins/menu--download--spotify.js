@@ -1,7 +1,5 @@
-import axios from 'axios';
-import {
-    AudioToOpus
-} from "@ryuu-reinzz/luna-lib";
+import { ytSearch, ytAudio } from "../lib/scrape.js";
+import { spotifyTitle } from "../lib/scrape.js";
 
 export default {
     command: ["spotify", "spdl"],
@@ -23,105 +21,44 @@ export default {
     }) => {
 
         if (!text) {
-            return reply(`⚠️ *Format Salah!*\n\nContoh:\n*${prefix + command} https://open.spotify.com/track/xxxxx*`);
-        }
-        if (!text.includes('spotify.com')) {
-            return reply('⚠️ Link tidak valid! Masukkan link Spotify yang benar.');
+            return reply(`⚠️ *Format Salah!*\n\nContoh:\n*${prefix + command} https://open.spotify.com/track/xxxxx*\n*${prefix + command} judul - artist*`);
         }
 
-        await RyuuBotz.sendMessage(m.chat, {
-            react: {
-                text: '⏳',
-                key: m.key
-            }
-        });
-
-        if (m.mtype === "templateButtonReplyMessage") {
-            await m.quoted.delete()
-        } else if (m.quoted && (m.quoted.mtype === 'interactiveMessage' || m.quoted.mtype === 'templateButtonReplyMessage')) {
-            try {
-                await RyuuBotz.sendMessage(m.chat, {
-                    delete: m.quoted.fakeObj.key
-                });
-            } catch (err) {
-                console.error("❌ Gagal menghapus pesan quoted:", err);
-            }
-        };
+        await RyuuBotz.sendMessage(m.chat, { react: { text: '⏳', key: m.key } });
 
         try {
-            const apiUrl = `https://api.ryuu-dev.my.id/downloader/spotify?url=${encodeURIComponent(text)}`;
-
-            const {
-                data
-            } = await axios.get(apiUrl, {
-                timeout: 30000,
-                headers: {
-                    "x-ryuu-apikey": global.ryuukey
+            let query = text.trim();
+            if (/spotify\.com/i.test(query)) {
+                const title = await spotifyTitle(query);
+                if (!title) {
+                    return reply(
+                        `⚠️ Judul lagu tidak kebaca dari link (Spotify nutup akses server).\n` +
+                        `Kirim manual aja:\n*${prefix + command} judul - artist*\nContoh:\n*${prefix + command} blue yung kai*`
+                    );
                 }
-            });
-
-            if (!data.success || data.result.error) {
-                throw new Error('Gagal mendapatkan respon dari API.');
+                query = title;
             }
 
-            const resData = data.result.result;
-            const metadata = resData.metadata;
-            const downloadUrl = resData.download;
-
-            if (!downloadUrl) throw new Error('Link download tidak ditemukan.');
-
-            const audioRes = await axios.get(downloadUrl, {
-                responseType: 'arraybuffer'
-            });
-
-            const audioBuffer = Buffer.from(audioRes.data);
-            const audio = await AudioToOpus(audioBuffer);
-
-            const title = metadata.name || 'Spotify Audio';
-            const artist = metadata.artist.map(v => v.name).join(', ') || 'Unknown Artist';
-            const thumbnail = metadata.album.images[0]?.url || global.thumbnail.main;
-            
-            const durationMs = metadata.duration_ms || 0;
-            const minutes = Math.floor(durationMs / 60000);
-            const seconds = ((durationMs % 60000) / 1000).toFixed(0);
-            const durationStr = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+            const results = await ytSearch(query, 1);
+            if (!results.length) throw new Error('Lagu tidak ketemu, coba kata lain.');
+            const audio = await ytAudio(results[0].link);
 
             await RyuuBotz.sendMessage(m.chat, {
-                audio,
-                mimetype: "audio/ogg; codecs=opus",
-                ptt: true,
-                contextInfo: {
-                    ...(global.adreply ? {
-                        externalAdReply: {
-                            title: title,
-                            body: `Artist: ${artist} | Duration: ${durationStr}`,
-                            thumbnailUrl: thumbnail,
-                            sourceUrl: text,
-                            mediaType: 1,
-                            renderLargerThumbnail: true
-                        }
-                    } : {})
-                }
-            }, {
-                quoted: m
-            });
+                audio: { url: audio.url },
+                mimetype: audio.mimetype,
+                fileName: audio.title.slice(0, 60) + '.' + audio.ext,
+            }, { quoted: m });
 
             await RyuuBotz.sendMessage(m.chat, {
-                react: {
-                    text: '✅',
-                    key: m.key
-                }
-            });
+                text: `🎧 *${audio.title}*\n👤 ${audio.channel} ⏱️ ${audio.duration}\n🔗 ${results[0].link}`,
+            }, { quoted: m });
+
+            await RyuuBotz.sendMessage(m.chat, { react: { text: '✅', key: m.key } });
 
         } catch (err) {
-            console.error('Spotify Error:', err);
-            await RyuuBotz.sendMessage(m.chat, {
-                react: {
-                    text: '❌',
-                    key: m.key
-                }
-            });
-            reply(`❌ Gagal mengambil audio Spotify.\n\n${err.message}`);
+            console.error('Spotify Error:', err.message);
+            await RyuuBotz.sendMessage(m.chat, { react: { text: '❌', key: m.key } });
+            reply(`❌ Gagal mengambil audio.\n\n${err.message}`);
         }
     }
 };

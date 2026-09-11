@@ -1,7 +1,4 @@
-import axios from 'axios';
-import {
-    AudioToOpus
-} from "@ryuu-reinzz/luna-lib";
+import { ytAudio, getmyfb } from "../lib/scrape.js";
 
 export default {
     command: ["igmp3"],
@@ -25,88 +22,49 @@ export default {
         if (!text) {
             return reply(`⚠️ *Format Salah!*\n\nContoh:\n*${prefix + command} https://www.instagram.com/reels/xxxxx*`);
         }
-        if (!text.includes('instagram.com') && !text.includes('instagr.am')) {
+        const link = text.trim().split(/\s+/)[0];
+        if (!link.includes('instagram.com') && !link.includes('instagr.am')) {
             return reply('⚠️ Link tidak valid! Masukkan link Instagram yang benar.');
         }
 
-        await RyuuBotz.sendMessage(m.chat, {
-            react: {
-                text: '⏳',
-                key: m.key
-            }
-        });
-
-        if (m.mtype === "templateButtonReplyMessage") {
-            await m.quoted.delete()
-        };
+        await RyuuBotz.sendMessage(m.chat, { react: { text: '⏳', key: m.key } });
 
         try {
-            // Mengubah path ke downloader/instagram
-            const apiUrl = `https://api.ryuu-dev.my.id/downloader/instagram?url=${encodeURIComponent(text)}&format=mp3`;
-
-            const {
-                data
-            } = await axios.get(apiUrl, {
-                timeout: 30000,
-                headers: {
-                    "x-ryuu-apikey": global.ryuukey
+            // jalur 1: fetcher getmyfb (tanpa key) — stream mp4 dikirim sebagai audio
+            try {
+                const g = await getmyfb(link);
+                const best = g.hd || g.sd || g.videos[0];
+                if (best) {
+                    await RyuuBotz.sendMessage(m.chat, {
+                        audio: { url: best },
+                        mimetype: 'audio/mp4',
+                        fileName: (g.title || 'instagram').slice(0, 60) + '.mp4',
+                    }, { quoted: m });
+                    await RyuuBotz.sendMessage(m.chat, { react: { text: '✅', key: m.key } });
+                    return;
                 }
-
-            });
-
-            if (!data.success || !data.result || !data.result.status) {
-                throw new Error('Gagal mendapatkan respon dari API.');
+            } catch (ge) {
+                console.log("IG getmyfb fail, fallback:", ge.message);
             }
 
-            const resData = data.result.result;
-            const mp3Url = resData.link;
-
-            if (!mp3Url) throw new Error('Link audio tidak ditemukan.');
-
-            const audioRes = await axios.get(mp3Url, {
-                responseType: 'arraybuffer'
-            });
-
-            const audioBuffer = Buffer.from(audioRes.data);
-            const audio = await AudioToOpus(audioBuffer);
-
-            const title = resData.title || 'Instagram Audio';
-            const thumbnail = resData.thumbnail || global.thumbnail.main;
-            const duration = resData.duration || 'Unknown';
+            // jalur 2: yt-dlp langsung (+cookies.txt bila ada)
+            const audio = await ytAudio(link);
 
             await RyuuBotz.sendMessage(m.chat, {
-                audio,
-                mimetype: "audio/ogg; codecs=opus",
-                ptt: true,
-                contextInfo: {
-                    externalAdReply: {
-                        title: title,
-                        body: `Duration: ${duration}`,
-                        thumbnailUrl: thumbnail,
-                        sourceUrl: text,
-                        mediaType: 1,
-                        renderLargerThumbnail: true
-                    }
-                }
-            }, {
-                quoted: m
-            });
+                audio: { url: audio.url },
+                mimetype: audio.mimetype,
+                fileName: audio.title.slice(0, 60) + '.' + audio.ext,
+            }, { quoted: m });
 
             await RyuuBotz.sendMessage(m.chat, {
-                react: {
-                    text: '✅',
-                    key: m.key
-                }
-            });
+                text: `🎵 *${audio.title}*\n🔗 ${link}`,
+            }, { quoted: m });
+
+            await RyuuBotz.sendMessage(m.chat, { react: { text: '✅', key: m.key } });
 
         } catch (err) {
-            console.error('IGMP3 Error:', err);
-            await RyuuBotz.sendMessage(m.chat, {
-                react: {
-                    text: '❌',
-                    key: m.key
-                }
-            });
+            console.error('IGMP3 Error:', err.message);
+            await RyuuBotz.sendMessage(m.chat, { react: { text: '❌', key: m.key } });
             reply(`❌ Gagal mengambil audio Instagram.\n\n${err.message}`);
         }
     }

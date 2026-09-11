@@ -1,5 +1,7 @@
 import axios from "axios";
 import "../settings.js";
+import { directMp4, ytAudio, ttMeta, COOKIE_HINT } from "../lib/scrape.js";
+import { savefrom } from "../lib/savefrom.js";
 
 export default {
     command: ["tiktok", "tt"],
@@ -21,141 +23,84 @@ export default {
         if (!text) {
             return reply(
                 `*Example:*\n` +
-                `${prefix}tiktok https://vt.tiktok.com/RyuuGanteng/\n` +
-                `${prefix}tiktok https://vt.tiktok.com/RyuuGanteng/ --no-audio\n` +
-                `${prefix}tiktok https://vt.tiktok.com/RyuuGanteng/ --only-audio\n` +
-                `${prefix}tiktok https://vt.tiktok.com/RyuuGanteng/ --only-video\n` +
-                `${prefix}tiktok https://vt.tiktok.com/RyuuGanteng/ --no-video`
+                `${prefix}tiktok https://vt.tiktok.com/xxxxx/\n` +
+                `${prefix}tiktok https://vt.tiktok.com/xxxxx/ --only-audio`
             );
         }
 
-        const flags = ["--no-audio", "--only-audio", "--only-video", "--no-video"];
-        const usedFlags = flags.filter(flag => text.includes(flag));
+        const onlyAudio = /--only-audio|--no-video/i.test(text);
+        const onlyVideo = /--only-video|--no-audio/i.test(text);
+        const url = text.replace(/--[\w-]+/g, "").trim();
 
-        if (usedFlags.length > 1) {
-            return reply("❌ Hanya boleh menggunakan satu flag.");
-        }
-
-        const flag = usedFlags[0] || null;
-        const url = text.replace(flag || "", "").trim();
-
-        if (!url) {
-            return reply(`*Example:* ${prefix}tiktok https://vt.tiktok.com/RyuuGanteng/`);
-        }
-
-        if (!/tiktok\.com|vt\.tiktok\.com/i.test(url)) {
+        if (!/tiktok\.com/i.test(url)) {
             return reply("Masukkan link TikTok yang valid!");
         }
 
-        await RyuuBotz.sendMessage(m.chat, {
-            react: {
-                text: "🕖",
-                key: m.key
-            }
-        });
+        await RyuuBotz.sendMessage(m.chat, { react: { text: "🕖", key: m.key } });
 
         try {
-            const {
-                data: res
-            } = await axios.get(
-                `https://api.ryuu-dev.my.id/downloader/tiktok?url=${encodeURIComponent(url)}`,
-                {
-                    headers: {
-                        "x-ryuu-apikey": global.ryuukey
-                    },
-                    timeout: 200000
-                }
-            );
+            const meta = await ttMeta(url);
 
-            if (!res?.success || !res?.result?.result?.status) {
-                return reply("❌ Gagal mengambil data TikTok.");
-            }
-
-            const data = res.result.result;
-
-            const caption =
-                `🎵 *TikTok Downloader*\n\n` +
-                `📝 *Deskripsi:* ${data.description || "-"}\n` +
-                `👤 *Author:* ${data.author}\n` +
-                `❤️ *Like:* ${data.stats?.like || 0}\n` +
-                `👁️ *Views:* ${data.stats?.views || 0}\n` +
-                `💬 *Komentar:* ${data.stats?.comment || 0}\n` +
-                `🔁 *Share:* ${data.stats?.share || 0}`;
-
-            const sendAudio = flag !== "--no-audio" && flag !== "--only-video";
-            const sendVideo = flag !== "--no-video" && flag !== "--only-audio";
-
-            if (data.isSlide) {
-                if (sendVideo || !data.videoUrl) {
-                    const album = data.imageUrls.map((url, i) => ({
-                        image: {
-                            url
-                        },
-                        caption: i === 0 ? caption : `📸 Slide ${i + 1}`
-                    }));
-
-                    await RyuuBotz.sendAlbum(m.chat, album, {
-                        quoted: m
-                    });
-                }
-
-                if (sendAudio && data.audioUrl) {
-                    await RyuuBotz.sendMessage(
-                        m.chat,
-                        {
-                            audio: {
-                                url: data.audioUrl
-                            },
-                            mimetype: "audio/mpeg",
-                            ptt: false
-                        },
-                        {
-                            quoted: m
-                        }
-                    );
-                }
-
-                return;
-            }
-
-            if (sendVideo && data.videoUrl) {
-                await RyuuBotz.sendMessage(
-                    m.chat,
-                    {
-                        video: {
-                            url: data.videoUrl
-                        },
-                        caption,
-                        mimetype: "video/mp4"
-                    },
-                    {
-                        quoted: m
+            // jalur 1: savefrom (tanpa key, tanpa cookies)
+            try {
+                const sf = await savefrom(url);
+                if (sf && sf.ok && sf.media.length) {
+                    const vids = sf.media.filter(m => /mp4|video/i.test((m.ext || '') + (m.type || '')) && m.url);
+                    const auds = sf.media.filter(m => /mp3|audio|m4a/i.test((m.ext || '') + (m.type || '')) && m.url);
+                    const caption = `🎵 *TikTok Downloader*\n\n📝 *Deskripsi:* ${sf.title || meta?.title || '-'}\n👤 *Author:* ${meta?.author || '-'}`;
+                    if (!onlyAudio && vids.length) {
+                        await RyuuBotz.sendMessage(m.chat, {
+                            video: { url: vids[0].url }, caption, mimetype: "video/mp4"
+                        }, { quoted: m });
                     }
-                );
+                    if (!onlyVideo && auds.length) {
+                        await RyuuBotz.sendMessage(m.chat, {
+                            audio: { url: auds[0].url }, mimetype: "audio/mpeg", ptt: false
+                        }, { quoted: m });
+                    }
+                    if ((onlyAudio && auds.length) || (!onlyAudio && vids.length)) {
+                        await RyuuBotz.sendMessage(m.chat, { react: { text: "✅", key: m.key } });
+                        return;
+                    }
+                }
+            } catch (sfe) {
+                console.log("TikTok savefrom fail, fallback:", sfe.message);
             }
 
-            if (sendAudio && data.audioUrl) {
-                await RyuuBotz.sendMessage(
-                    m.chat,
-                    {
-                        audio: {
-                            url: data.audioUrl
-                        },
-                        mimetype: "audio/mpeg",
-                        ptt: false
-                    },
-                    {
-                        quoted: m
-                    }
-                );
+            // jalur 2: yt-dlp (butuh cookies.txt untuk IP diblokir)
+
+            if (onlyAudio) {
+                const audio = await ytAudio(url);
+                await RyuuBotz.sendMessage(m.chat, {
+                    audio: { url: audio.url },
+                    mimetype: audio.mimetype,
+                    fileName: (meta?.title || 'tiktok') + '.' + audio.ext,
+                }, { quoted: m });
+            } else {
+                const v = await directMp4(url, 720);
+                const caption =
+                    `🎵 *TikTok Downloader*\n\n` +
+                    `📝 *Deskripsi:* ${meta?.title || v.title}\n` +
+                    `👤 *Author:* ${meta?.author || v.channel}`;
+                await RyuuBotz.sendMessage(m.chat, {
+                    video: { url: v.url },
+                    caption, mimetype: "video/mp4"
+                }, { quoted: m });
+                if (!onlyVideo) {
+                    try {
+                        const audio = await ytAudio(url);
+                        await RyuuBotz.sendMessage(m.chat, {
+                            audio: { url: audio.url },
+                            mimetype: audio.mimetype, ptt: false
+                        }, { quoted: m });
+                    } catch (_) {}
+                }
             }
+            await RyuuBotz.sendMessage(m.chat, { react: { text: "✅", key: m.key } });
         } catch (err) {
-            console.log("TikTok Error:", err);
-            reply(
-                `❌ Error saat memproses:\n${
-                    err?.response?.data?.message || err.message || err
-                }`
-            );
+            console.log("TikTok Error:", err.message);
+            await RyuuBotz.sendMessage(m.chat, { react: { text: "❌", key: m.key } });
+            reply(`❌ Gagal mengambil TikTok.\n\n${err.message}`);
         }
     }
 };

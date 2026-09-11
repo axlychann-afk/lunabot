@@ -1,5 +1,8 @@
 import axios from "axios";
 import "../settings.js";
+import { getmyfb } from "../lib/scrape.js";
+
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
 
 export default {
   command: ["fb", "fbdl", "facebook", "facebookvid"],
@@ -19,83 +22,55 @@ export default {
         `Silakan kirimkan tautan video Facebook\n\nCONTOH:\n*${prefix + command}* https://fb.watch/...`
       );
 
-    await reply("tunggu sebentar ya..");
+    const link = text.trim().split(/\s+/)[0];
+    if (!/facebook\.com|fb\.watch/i.test(link)) return reply("Link bukan Facebook.");
+
+    await RyuuBotz.sendMessage(m.chat, { react: { text: "⏱️", key: m.key } });
 
     try {
-      const getFBInfo = videoUrl => {
-        const headers = {
-          "sec-fetch-user": "?1",
-          "sec-ch-ua-mobile": "?0",
-          "sec-fetch-site": "none",
-          "sec-fetch-dest": "document",
-          "sec-fetch-mode": "navigate",
-          "cache-control": "max-age=0",
-          authority: "www.facebook.com",
-          "upgrade-insecure-requests": "1",
-          "accept-language": "en-GB,en;q=0.9",
-          "sec-ch-ua":
-            '"Google Chrome";v="89", "Chromium";v="89", ";Not A Brand";v="99"',
-          "user-agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          accept:
-            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-        };
+      // jalur 1: fetcher getmyfb (tanpa key)
+      try {
+        const g = await getmyfb(link);
+        const best = g.hd || g.sd || g.videos[0];
+        if (best) {
+          await RyuuBotz.sendMessage(m.chat, {
+            video: { url: best },
+            mimetype: 'video/mp4',
+            caption: `*${g.title}*${g.hd ? ' (HD)' : ''}`
+          }, { quoted: m });
+          await RyuuBotz.sendMessage(m.chat, { react: { text: "✅", key: m.key } });
+          return;
+        }
+      } catch (ge) {
+        console.log("FB getmyfb fail, fallback scrape:", ge.message);
+      }
 
-        const parseString = str =>
-          JSON.parse(`{"text":"${str}"}`).text;
+      // jalur 2: scrape halaman langsung
+      const { data } = await axios.get(link, {
+        headers: { "User-Agent": UA, "Accept-Language": "en-US,en;q=0.9" },
+        timeout: 30000, maxRedirects: 5,
+      });
+      const html = String(data).replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+      const unesc = (s) => { try { return JSON.parse(`{"text":"${s}"}`).text; } catch (_) { return s; } };
 
-        return new Promise((resolve, reject) => {
-          if (!videoUrl || !videoUrl.trim())
-            return reject("URL tidak valid");
+      const hd = html.match(/"browser_native_hd_url":"(.*?)"/);
+      const sd = html.match(/"browser_native_sd_url":"(.*?)"/) || html.match(/"playable_url":"(.*?)"/);
+      const title = (html.match(/<meta\sname="description"\scontent="(.*?)"/) || [])[1];
 
-          if (
-            ["facebook.com", "fb.watch"].every(domain =>
-              !videoUrl.includes(domain)
-            )
-          )
-            return reject("Link bukan Facebook");
+      const best = hd?.[1] || sd?.[1];
+      if (!best) throw new Error("Video tidak ditemukan (privat / login-wall). Coba video publik lain.");
 
-          axios
-            .get(videoUrl, { headers })
-            .then(({ data }) => {
-              data = data
-                .replace(/&quot;/g, '"')
-                .replace(/&amp;/g, "&");
+      await RyuuBotz.sendMessage(m.chat, {
+        video: { url: unesc(best) },
+        mimetype: 'video/mp4',
+        caption: `*${title ? unesc(title) : 'Facebook Video'}*${hd ? ' (HD)' : ''}`
+      }, { quoted: m });
 
-              const sdMatch =
-                data.match(/"browser_native_sd_url":"(.*?)"/) ||
-                data.match(/"playable_url":"(.*?)"/);
-
-              const titleMatch = data.match(
-                /<meta\sname="description"\scontent="(.*?)"/
-              );
-
-              if (!sdMatch) return reject("Video tidak ditemukan");
-
-              resolve({
-                sd: parseString(sdMatch[1]),
-                title: titleMatch
-                  ? parseString(titleMatch[1])
-                  : "Facebook Video"
-              });
-            })
-            .catch(() => reject("Gagal mengambil data video"));
-        });
-      };
-
-      const hasil = await getFBInfo(text);
-
-      await RyuuBotz.sendMessage(
-        m.chat,
-        {
-          video: { url: hasil.sd },
-          caption: `*${hasil.title}*`
-        },
-        { quoted: m }
-      );
+      await RyuuBotz.sendMessage(m.chat, { react: { text: "✅", key: m.key } });
     } catch (err) {
-      console.log("FB Error:", err);
-      reply("Yah error kak");
+      console.log("FB Error:", err.message);
+      await RyuuBotz.sendMessage(m.chat, { react: { text: "❌", key: m.key } });
+      reply(`❌ Gagal mengambil video Facebook.\n\n${err.message}`);
     }
   }
 };

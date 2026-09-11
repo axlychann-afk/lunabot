@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { bratPng } from "../lib/canvas.js";
 
 export default {
     command: ["brathd"],
@@ -21,33 +21,22 @@ export default {
         if (!text) return reply('❌ Masukkan teks untuk membuat stiker.');
 
         await RyuuBotz.sendMessage(m.chat, {
-            react: {
-                text: "⏱️",
-                key: m.key
-            }
+            react: { text: "⏱️", key: m.key }
         });
 
         try {
-            const sticker = `https://api.ryuu-dev.my.id/canvas/brat/v2?text=${encodeURIComponent(text)}`;
-
-            const {
-                data: buffer
-            } = await axios.get(sticker, {
-                responseType: "arraybuffer",
-                headers: {
-                    "x-ryuu-apikey": global.ryuukey
-                }
-            });
-
+            const buffer = await bratPng(text.slice(0, 200), { hd: true });
             await RyuuBotz.sendSticker(m.chat, {
                 sticker: buffer,
                 packname: global.packname,
                 author: global.author
             });
+            await RyuuBotz.sendMessage(m.chat, {
+                react: { text: "✅", key: m.key }
+            });
         } catch (err) {
             console.error("❌ Error:", err);
             reply("Terjadi kesalahan saat membuat stiker.");
         }
-
     }
 };

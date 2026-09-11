@@ -1,7 +1,7 @@
-import axios from 'axios';
+import { directMp4, getmyfb } from "../lib/scrape.js";
 
 export default {
-    command: ["igmp4", "ig"],
+    command: ["igmp4"],
     group: false,
     premium: false,
     limit: true,
@@ -22,76 +22,46 @@ export default {
         if (!text) {
             return reply(`⚠️ *Format Salah!*\n\nContoh:\n*${prefix + command} https://www.instagram.com/reels/xxxxx*`);
         }
-        if (!text.includes('instagram.com') && !text.includes('instagr.am')) {
+        const link = text.trim().split(/\s+/)[0];
+        if (!link.includes('instagram.com') && !link.includes('instagr.am')) {
             return reply('⚠️ Link tidak valid! Masukkan link Instagram yang benar.');
         }
 
-        await RyuuBotz.sendMessage(m.chat, {
-            react: {
-                text: '⏳',
-                key: m.key
-            }
-        });
-
-        if (m.mtype === "templateButtonReplyMessage") {
-            await m.quoted.delete()
-        };
+        await RyuuBotz.sendMessage(m.chat, { react: { text: '⏳', key: m.key } });
 
         try {
-            // Mengubah path ke downloader/instagram
-            const apiUrl = `https://api.ryuu-dev.my.id/downloader/instagram?url=${encodeURIComponent(text)}&format=480`;
-
-            const {
-                data
-            } = await axios.get(apiUrl, {
-                timeout: 45000,
-                headers: {
-                    "x-ryuu-apikey": global.ryuukey
+            // jalur 1: fetcher getmyfb (tanpa key)
+            try {
+                const g = await getmyfb(link);
+                const best = g.hd || g.sd || g.videos[0];
+                if (best) {
+                    await RyuuBotz.sendMessage(m.chat, {
+                        video: { url: best },
+                        mimetype: 'video/mp4',
+                        caption: `🎬 *INSTAGRAM DOWNLOADER*\n\n📝 *Judul:* ${g.title}\n🔗 ${link}`
+                    }, { quoted: m });
+                    await RyuuBotz.sendMessage(m.chat, { react: { text: '✅', key: m.key } });
+                    return;
                 }
-
-            });
-
-            if (!data.success || !data.result || !data.result.status) {
-                throw new Error('Gagal mendapatkan respon dari API.');
+            } catch (ge) {
+                console.log("IG getmyfb fail, fallback:", ge.message);
             }
 
-            const resData = data.result.result;
-            const videoUrl = resData.link;
-
-            if (!videoUrl) throw new Error('Link video tidak ditemukan.');
-
-            const title = resData.title || 'Instagram Video';
-            const duration = resData.duration || 'Unknown';
-
-            const videoRes = await axios.get(videoUrl, {
-                responseType: 'arraybuffer'
-            });
+            // jalur 2: yt-dlp (+cookies.txt bila ada)
+            const v = await directMp4(link, 720);
 
             await RyuuBotz.sendMessage(m.chat, {
-                video: Buffer.from(videoRes.data),
-                caption: `🎬 *INSTAGRAM DOWNLOADER*\n\n` +
-                    `📝 *Judul:* ${title}\n` +
-                    `⏳ *Durasi:* ${duration}`
-            }, {
-                quoted: m
-            });
+                video: { url: v.url },
+                mimetype: 'video/mp4',
+                caption: `🎬 *INSTAGRAM DOWNLOADER*\n\n📝 *Judul:* ${v.title}\n🔗 ${link}`
+            }, { quoted: m });
 
-            await RyuuBotz.sendMessage(m.chat, {
-                react: {
-                    text: '✅',
-                    key: m.key
-                }
-            });
+            await RyuuBotz.sendMessage(m.chat, { react: { text: '✅', key: m.key } });
 
         } catch (err) {
-            console.error('IGMP4 Error:', err);
-            await RyuuBotz.sendMessage(m.chat, {
-                react: {
-                    text: '❌',
-                    key: m.key
-                }
-            });
-            reply(`❌ Gagal mengambil video Instagram.\n\nError: ${err.message}`);
+            console.error('IGMP4 Error:', err.message);
+            await RyuuBotz.sendMessage(m.chat, { react: { text: '❌', key: m.key } });
+            reply(`❌ Gagal mengambil video Instagram.\n\n${err.message}`);
         }
     }
 };

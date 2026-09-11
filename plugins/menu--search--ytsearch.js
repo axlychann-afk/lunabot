@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { ytSearch } from "../lib/scrape.js";
 
 export default {
     command: ["ytsearch", "yts"],
@@ -22,107 +22,44 @@ export default {
         if (!text) return reply("⚠️ Masukkan judul lagu/video YouTube!");
 
         await RyuuBotz.sendMessage(m.chat, {
-            react: {
-                text: '⏱️',
-                key: m.key
-            }
+            react: { text: '⏱️', key: m.key }
         });
 
-        if (m.mtype === "templateButtonReplyMessage") {
-            await m.quoted.delete()
-        };
-
         try {
-            const apiKey = "ryuu-apis-bcb4544aeb4506961776618614240";
-            const headers = {
-                "x-ryuu-apikey": apiKey
-            };
+            const videos = await ytSearch(text.trim(), 8);
 
-            const searchRes = await axios.get(`https://api.ryuu-dev.my.id/discovery/search/youtube`, {
-                params: {
-                    q: text
-                },
-                headers: headers
-            });
-
-            const response = searchRes.data;
-            const videos = response?.result?.result;
-            console.log(response);
-
-            if (!response.success || !Array.isArray(videos) || videos.length === 0) {
-                return reply("❌ Video tidak ditemukan atau API error.");
+            if (!videos.length) {
+                await RyuuBotz.sendMessage(m.chat, {
+                    react: { text: '❌', key: m.key }
+                });
+                return reply("❌ Video tidak ditemukan, coba kata kunci lain.");
             }
 
-            const selectedVideos = videos.slice(0, 15);
-
-            const bodyPayload = {
-                videos: selectedVideos.map(v => ({
-                    title: v.title,
-                    channel: v.channel,
-                    views: v.views,
-                    ago: v.ago,
-                    imageUrl: v.imageUrl
-                }))
-            };
-
-            const quickReplies = selectedVideos.map(v => ({
-                name: "single_select",
-                buttonParamsJson: JSON.stringify({
-                    title: `➡️ Download ${v.title}`,
-                    sections: [{
-                        title: `Select downloader format`,
-                        rows: [{
-                                title: `🎥 Download Video`,
-                                description: `Download video ${v.title}`,
-                                id: `${prefix}ytmp4 ${v.link}`
-                            },
-                            {
-                                title: `💽 Download Audio`,
-                                description: `Download audio ${v.title}`,
-                                id: `${prefix}ytmp3 ${v.link}`
-                            }
-                        ]
-                    }]
-                })
-            }));
-
-            const imgRes = await axios.post("https://api.ryuu-dev.my.id/canvas/yt-search", bodyPayload, {
-                headers: headers,
-                responseType: 'arraybuffer'
+            let msg = `🔎 *Hasil pencarian YouTube:*\n"${text.trim()}"\n\n`;
+            videos.forEach((v, i) => {
+                msg += `*${i + 1}.* ${v.title}\n   👤 ${v.channel} ⏱️ ${v.duration} 👁️ ${v.views}\n   🔗 ${v.link}\n\n`;
             });
+            msg += `Download: *${prefix}ytmp3 <link>* (audio) / *${prefix}ytmp4 <link>* (video)`;
 
-            const imageBuffer = Buffer.from(imgRes.data);
+            try {
+                await RyuuBotz.sendMessage(m.chat, {
+                    image: { url: videos[0].thumb },
+                    caption: msg,
+                }, { quoted: m });
+            } catch (_) {
+                await RyuuBotz.sendMessage(m.chat, { text: msg }, { quoted: m });
+            }
 
             await RyuuBotz.sendMessage(m.chat, {
-                react: {
-                    text: '✅',
-                    key: m.key
-                }
+                react: { text: '✅', key: m.key }
             });
-
-            await RyuuBotz.sendButton(
-                m.chat, {
-                    image: imageBuffer,
-                    caption: `🔎 Hasil pencarian YouTube:\n"${text}"`,
-                    footer: global.ownername,
-                    buttons: quickReplies,
-                    bottom_sheet: true,
-                    bottom_name: "Select Video:"
-                }, {
-                    quoted: m
-                }
-            );
 
         } catch (err) {
+            console.error("YTSEARCH Error:", err);
             await RyuuBotz.sendMessage(m.chat, {
-                react: {
-                    text: '❌',
-                    key: m.key
-                }
+                react: { text: '❌', key: m.key }
             });
-
-            const errorMsg = err.response?.data?.message || err.message;
-            reply(`❌ Terjadi kesalahan: ${errorMsg}`);
+            reply(`❌ Terjadi kesalahan: ${err.message}`);
         }
     }
 };
