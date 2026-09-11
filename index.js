@@ -292,10 +292,15 @@ async function startsesi() {
     } = await import("./lib/print.js");
     await print(ramUsage, diskUsage, diskFree, nameBot, verBot, verNodejs, npmVersion, totalPlugins, bailName, verBail, chalk);
 
+    const sessionDir = path.join(__dirname, 'session');
+    if (!fs.existsSync(sessionDir)) {
+        fs.mkdirSync(sessionDir, { recursive: true });
+    }
+
     const {
         saveCreds,
         state
-    } = await useSQLiteAuthState(`./session/auth.db`, {
+    } = await useSQLiteAuthState(path.join(__dirname, 'session', 'auth.db'), {
         proto,
         BufferJSON,
         initAuthCreds
