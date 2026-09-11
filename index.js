@@ -379,11 +379,30 @@ ${chalk.hex('#00e5ff')('│')} ${chalk.bold.white('VER')}  ${chalk.gray('»')} $
 ${chalk.hex('#ff00ff')('╚═══════════════════════════════════════════╝')}
 `);
 
-        const number = phoneNumber;
+        const number = String(phoneNumber || '').replace(/[^0-9]/g, '');
+        if (!number || number === '-' || number.length < 8) {
+            console.log(chalk.red(`[AUTH] Nomor bot belum valid: "${phoneNumber}". Isi global.nomorbot di settings.js contoh: "6281234567890", lalu restart.`));
+            process.exit(1);
+        }
         const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-        await delay(6000);
 
-        const code = await RyuuBotz.requestPairingCode(number);
+        let code = null;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+                if (!RyuuBotz.ws || RyuuBotz.ws.readyState !== 1) {
+                    console.log(chalk.yellow(`[AUTH] Socket belum open, tunggu... percobaan ${attempt}/3`));
+                    await delay(8000);
+                } else {
+                    await delay(3000);
+                }
+                code = await RyuuBotz.requestPairingCode(number);
+                break;
+            } catch (e) {
+                console.log(chalk.red(`[AUTH] Pairing gagal percobaan ${attempt}/3: ${e?.message || e}`));
+                if (attempt === 3) throw e;
+                await delay(10000);
+            }
+        }
 
         console.log(`
 ${chalk.cyan.bold("╔═══════════ NETWORK MONITOR ═══════════╗")}
