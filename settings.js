@@ -1,7 +1,7 @@
 /* =================[ OWNER ]================= */
 global.lidownernumber = null //biarkan kosong, nanti di isi di dalam RAM
-global.ownernumber = "-"
-global.ownername = "-"
+global.ownernumber = "6282191240883"
+global.ownername = "axly"
 
 
 /* ==================[ BOT ]=================== */
