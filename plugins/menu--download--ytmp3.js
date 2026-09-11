@@ -1,4 +1,4 @@
-import { ytAudio, isYtLink } from "../lib/scrape.js";
+import { ytAudio, isYtLink, fetchBuffer } from "../lib/scrape.js";
 
 export default {
     command: ["ytmp3"],
@@ -41,7 +41,7 @@ export default {
             }
 
             await RyuuBotz.sendMessage(m.chat, {
-                audio: { url: audio.url },
+                audio: await fetchBuffer(audio.url),
                 mimetype: audio.mimetype,
                 fileName: audio.title.slice(0, 60) + '.' + audio.ext,
             }, { quoted: m });

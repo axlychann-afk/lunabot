@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { ytVideo, ytVideoFile, isYtLink } from "../lib/scrape.js";
+import { ytVideo, ytVideoFile, isYtLink, fetchBuffer } from "../lib/scrape.js";
 
 export default {
     command: ["ytmp4"],
@@ -43,7 +43,7 @@ export default {
                     throw new Error(`Video kebesaran (~${Math.round(video.size / 1048576)}MB, batas 100MB).\nLink: ${link}`);
                 }
                 await RyuuBotz.sendMessage(m.chat, {
-                    video: { url: video.url },
+                    video: await fetchBuffer(video.url),
                     mimetype: 'video/mp4',
                     fileName: video.title.slice(0, 60) + '.mp4',
                     caption: `📹 *${video.title}*\n👤 ${video.channel} ⏱️ ${video.duration} (${video.height}p)`,
