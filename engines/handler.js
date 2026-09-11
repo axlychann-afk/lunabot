@@ -1118,8 +1118,11 @@ ${highlight("╚═════════════════════�
                 // ========================
 
                 let baseDir = "./database/jadibot/";
+                if (!fs.existsSync(baseDir)) {
+                    fs.mkdirSync(baseDir, { recursive: true });
+                }
 
-                let dirs = fs.readdirSync(baseDir)
+                let dirs = fs.existsSync(baseDir) ? fs.readdirSync(baseDir)
                     .filter(d => {
                         let fullPath = path.join(baseDir, d);
 

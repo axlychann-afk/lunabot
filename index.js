@@ -198,14 +198,21 @@ function saveClientState() {
     fs.writeFileSync(cstate, JSON.stringify(data, null, 2));
 }
 async function initOwnerLID(RyuuBotz) {
-    if (global.lidownernumber) return global.lidownernumber;
+    try {
+        if (global.lidownernumber) return global.lidownernumber;
+        const raw = String(global.ownernumber || '').replace(/[^0-9]/g, '');
+        if (!raw || raw === '-' || raw.length < 8) return null;
 
-    const jid = global.ownernumber + "@s.whatsapp.net";
-    const lid = await RyuuBotz.signalRepository.lidMapping
-        .getLIDForPN(jid);
+        const jid = raw + "@s.whatsapp.net";
+        const lid = await RyuuBotz.signalRepository.lidMapping
+            .getLIDForPN(jid);
 
-    global.lidownernumber = lid.split("@")[0];
-    return global.lidownernumber;
+        if (!lid || typeof lid !== 'string' || !lid.includes('@')) return null;
+        global.lidownernumber = lid.split("@")[0];
+        return global.lidownernumber;
+    } catch (_) {
+        return global.lidownernumber || null;
+    }
 }
 
 // UTILS
@@ -513,7 +520,9 @@ ${chalk.cyan.bold("╚═══════════════════�
 ${chalk.gray(` [${timestamp}]`)} ${chalk.white("Waiting for incoming messages...")}
 `);
 
-                await initOwnerLID(RyuuBotz);
+                try {
+                    await initOwnerLID(RyuuBotz);
+                } catch (_) {}
 
                 logger.add(`database/logger/bot-${global.nomorbot}.log`, "Logger initiated");
                 logger.view(`./database/logger/bot-${global.nomorbot}.log`);
