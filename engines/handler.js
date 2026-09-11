@@ -1122,7 +1122,7 @@ ${highlight("╚═════════════════════�
                     fs.mkdirSync(baseDir, { recursive: true });
                 }
 
-                let dirs = fs.existsSync(baseDir) ? fs.readdirSync(baseDir)
+                let dirs = fs.readdirSync(baseDir)
                     .filter(d => {
                         let fullPath = path.join(baseDir, d);
 
